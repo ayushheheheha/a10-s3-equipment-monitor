@@ -18,8 +18,14 @@
   tr.warn td { background: #fdecea; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; color: #fff; }
   .Running { background: #2e7d32; } .Idle { background: #757575; } .Maintenance { background: #ef6c00; } .Down { background: #c62828; }
+  .Critical { background: #b71c1c; } .High { background: #e65100; } .Medium { background: #f9a825; color: #222; } .Low { background: #2e7d32; }
   .alert { background: #fdecea; border-left: 6px solid #c62828; padding: 10px 14px; margin-bottom: 8px; font-size: 14px; }
   .ok { background: #e8f5e9; border-left-color: #2e7d32; }
+  .cards { display: flex; gap: 12px; flex-wrap: wrap; }
+  .card { flex: 1; min-width: 200px; background: #f6f8fb; border: 1px solid #d9dfe7; border-radius: 6px; padding: 12px; }
+  .card b { display: block; font-size: 24px; color: #1f3a5f; margin-top: 4px; }
+  .filters label { margin-right: 18px; font-size: 14px; }
+  select { padding: 4px 8px; font-size: 14px; }
   footer { text-align: center; font-size: 13px; color: #55606e; padding: 14px; }
 </style>
 </head>
@@ -34,12 +40,32 @@
     <div id="alerts"></div>
   </section>
   <section>
+    <h2>Downtime Analytics</h2>
+    <div class="cards">
+      <div class="card">Total machines<b id="cTotal"></b></div>
+      <div class="card">Operational machines<b id="cOperational"></b></div>
+      <div class="card">Total downtime<b id="cDowntime"></b></div>
+      <div class="card">Highest maintenance risk<b id="cRisk"></b></div>
+    </div>
+  </section>
+  <section>
     <h2>Machine Status</h2>
+    <p class="filters">
+      <label>Status: <select id="fStatus" onchange="render()"><option>All</option><option>Running</option><option>Idle</option><option>Maintenance</option><option>Down</option></select></label>
+      <label>Production unit: <select id="fUnit" onchange="render()"><option>All</option><option>Machining</option><option>Stamping</option><option>Assembly</option><option>Packaging</option><option>Moulding</option><option>Finishing</option></select></label>
+    </p>
     <table>
       <thead>
         <tr><th>Machine ID</th><th>Production Unit</th><th>Operating Hours</th><th>Temperature (&deg;C)</th><th>Vibration (mm/s)</th><th>Status</th><th>Maintenance Due</th><th>Recent Downtime</th></tr>
       </thead>
       <tbody id="rows"></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Maintenance Priority</h2>
+    <table>
+      <thead><tr><th>Rank</th><th>Machine ID</th><th>Production Unit</th><th>Risk Score</th><th>Severity</th><th>Recommended Action</th></tr></thead>
+      <tbody id="priority"></tbody>
     </table>
   </section>
 </main>
@@ -59,18 +85,44 @@
 
   function isWarning(m) { return m.temp > TEMP_LIMIT || m.vib > VIB_LIMIT; }
 
+  // predictive maintenance risk score (0-100): temperature, vibration, downtime and operating hours
+  function risk(m) {
+    return Math.round(Math.min(m.temp / TEMP_LIMIT, 1.3) * 30 + Math.min(m.vib / VIB_LIMIT, 1.5) * 30 +
+                      Math.min(m.down, 12) / 12 * 20 + Math.min(m.hours / 25000, 1) * 20);
+  }
+  function severity(score) { return score >= 80 ? 'Critical' : score >= 65 ? 'High' : score >= 50 ? 'Medium' : 'Low'; }
+  function action(sev) {
+    return { Critical: 'Stop the machine and repair immediately', High: 'Schedule maintenance within 48 hours',
+             Medium: 'Plan an inspection this week', Low: 'Routine check at the next due date' }[sev];
+  }
+
   function render() {
+    var fs = document.getElementById('fStatus').value, fu = document.getElementById('fUnit').value;
     var rows = '', alerts = '';
     machines.forEach(function (m) {
-      var w = isWarning(m);
-      rows += '<tr class="' + (w ? 'warn' : '') + '"><td>' + m.id + '</td><td>' + m.unit + '</td><td>' + m.hours + '</td><td>' + m.temp +
-        '</td><td>' + m.vib + '</td><td><span class="badge ' + m.status + '">' + m.status + '</span></td><td>' + m.due +
-        '</td><td>' + m.down + ' h (' + m.lastDown + ')</td></tr>';
       if (m.temp > TEMP_LIMIT) alerts += '<div class="alert">WARNING: ' + m.id + ' temperature ' + m.temp + ' &deg;C exceeds ' + TEMP_LIMIT + ' &deg;C</div>';
       if (m.vib > VIB_LIMIT) alerts += '<div class="alert">WARNING: ' + m.id + ' vibration ' + m.vib + ' mm/s exceeds ' + VIB_LIMIT + ' mm/s</div>';
+      if ((fs !== 'All' && m.status !== fs) || (fu !== 'All' && m.unit !== fu)) return;
+      rows += '<tr class="' + (isWarning(m) ? 'warn' : '') + '"><td>' + m.id + '</td><td>' + m.unit + '</td><td>' + m.hours + '</td><td>' + m.temp +
+        '</td><td>' + m.vib + '</td><td><span class="badge ' + m.status + '">' + m.status + '</span></td><td>' + m.due +
+        '</td><td>' + m.down + ' h (' + m.lastDown + ')</td></tr>';
     });
-    document.getElementById('rows').innerHTML = rows;
+    document.getElementById('rows').innerHTML = rows || '<tr><td colspan="8">No machines match the selected filters.</td></tr>';
     document.getElementById('alerts').innerHTML = alerts || '<div class="alert ok">All machines are within limits.</div>';
+
+    var ranked = machines.map(function (m) { return { m: m, score: risk(m) }; }).sort(function (a, b) { return b.score - a.score; });
+    var totalDown = machines.reduce(function (s, m) { return s + m.down; }, 0);
+    document.getElementById('cTotal').innerHTML = machines.length;
+    document.getElementById('cOperational').innerHTML = machines.filter(function (m) { return m.status === 'Running'; }).length;
+    document.getElementById('cDowntime').innerHTML = totalDown.toFixed(1) + ' h';
+    document.getElementById('cRisk').innerHTML = ranked[0].m.id + ' (' + ranked[0].score + ')';
+    var pr = '';
+    ranked.forEach(function (r, i) {
+      var sev = severity(r.score);
+      pr += '<tr><td>' + (i + 1) + '</td><td>' + r.m.id + '</td><td>' + r.m.unit + '</td><td>' + r.score +
+            '</td><td><span class="badge ' + sev + '">' + sev + '</span></td><td>' + action(sev) + '</td></tr>';
+    });
+    document.getElementById('priority').innerHTML = pr;
   }
   render();
 </script>
