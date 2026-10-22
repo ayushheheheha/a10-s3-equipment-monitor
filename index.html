@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equipment Monitoring Dashboard</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #eef1f5; margin: 0; color: #1d2733; }
+  header { background: #1f3a5f; color: #fff; padding: 20px; text-align: center; }
+  header h1 { margin: 0 0 4px; font-size: 26px; }
+  header p { margin: 0; font-size: 14px; }
+  main { max-width: 1100px; margin: 20px auto; padding: 0 14px; }
+  section { background: #fff; border-radius: 6px; padding: 14px 18px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+  h2 { margin-top: 0; font-size: 19px; color: #1f3a5f; border-bottom: 2px solid #1f3a5f; padding-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid #d9dfe7; padding: 7px 8px; text-align: left; }
+  th { background: #e6ebf2; }
+  tr.warn td { background: #fdecea; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; color: #fff; }
+  .Running { background: #2e7d32; } .Idle { background: #757575; } .Maintenance { background: #ef6c00; } .Down { background: #c62828; }
+  .alert { background: #fdecea; border-left: 6px solid #c62828; padding: 10px 14px; margin-bottom: 8px; font-size: 14px; }
+  .ok { background: #e8f5e9; border-left-color: #2e7d32; }
+  footer { text-align: center; font-size: 13px; color: #55606e; padding: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Equipment Monitoring Dashboard</h1>
+  <p>Industrial Predictive Maintenance System | Warning limits: temperature above 80 &deg;C, vibration above 7.0 mm/s</p>
+</header>
+<main>
+  <section>
+    <h2>Warnings</h2>
+    <div id="alerts"></div>
+  </section>
+  <section>
+    <h2>Machine Status</h2>
+    <table>
+      <thead>
+        <tr><th>Machine ID</th><th>Production Unit</th><th>Operating Hours</th><th>Temperature (&deg;C)</th><th>Vibration (mm/s)</th><th>Status</th><th>Maintenance Due</th><th>Recent Downtime</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+</main>
+<footer>Equipment Monitor | Release 0.0.0-dev | Plant Control Room</footer>
+<script>
+  var TEMP_LIMIT = 80, VIB_LIMIT = 7.0;
+  var machines = [
+    { id: 'M-101', unit: 'Machining', hours: 12450, temp: 72, vib: 3.2, status: 'Running',     due: '2026-11-05', down: 1.5,  lastDown: '12-Oct-2026' },
+    { id: 'M-102', unit: 'Stamping',  hours: 18230, temp: 86, vib: 5.1, status: 'Running',     due: '2026-10-28', down: 4.0,  lastDown: '09-Oct-2026' },
+    { id: 'M-103', unit: 'Assembly',  hours: 9870,  temp: 68, vib: 8.4, status: 'Running',     due: '2026-11-12', down: 2.5,  lastDown: '15-Oct-2026' },
+    { id: 'M-104', unit: 'Packaging', hours: 22110, temp: 64, vib: 2.4, status: 'Idle',        due: '2026-12-01', down: 0.5,  lastDown: '02-Oct-2026' },
+    { id: 'M-105', unit: 'Moulding',  hours: 15340, temp: 83, vib: 7.6, status: 'Maintenance', due: '2026-10-24', down: 9.0,  lastDown: '18-Oct-2026' },
+    { id: 'M-106', unit: 'Machining', hours: 7430,  temp: 70, vib: 3.9, status: 'Running',     due: '2026-11-20', down: 0,    lastDown: 'None' },
+    { id: 'M-107', unit: 'Packaging', hours: 11980, temp: 77, vib: 6.1, status: 'Down',        due: '2026-10-25', down: 12.0, lastDown: '20-Oct-2026' },
+    { id: 'M-108', unit: 'Finishing', hours: 5210,  temp: 59, vib: 1.8, status: 'Running',     due: '2026-12-15', down: 0.5,  lastDown: '05-Oct-2026' }
+  ];
+
+  function isWarning(m) { return m.temp > TEMP_LIMIT || m.vib > VIB_LIMIT; }
+
+  function render() {
+    var rows = '', alerts = '';
+    machines.forEach(function (m) {
+      var w = isWarning(m);
+      rows += '<tr class="' + (w ? 'warn' : '') + '"><td>' + m.id + '</td><td>' + m.unit + '</td><td>' + m.hours + '</td><td>' + m.temp +
+        '</td><td>' + m.vib + '</td><td><span class="badge ' + m.status + '">' + m.status + '</span></td><td>' + m.due +
+        '</td><td>' + m.down + ' h (' + m.lastDown + ')</td></tr>';
+      if (m.temp > TEMP_LIMIT) alerts += '<div class="alert">WARNING: ' + m.id + ' temperature ' + m.temp + ' &deg;C exceeds ' + TEMP_LIMIT + ' &deg;C</div>';
+      if (m.vib > VIB_LIMIT) alerts += '<div class="alert">WARNING: ' + m.id + ' vibration ' + m.vib + ' mm/s exceeds ' + VIB_LIMIT + ' mm/s</div>';
+    });
+    document.getElementById('rows').innerHTML = rows;
+    document.getElementById('alerts').innerHTML = alerts || '<div class="alert ok">All machines are within limits.</div>';
+  }
+  render();
+</script>
+</body>
+</html>
